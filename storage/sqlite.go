@@ -15,7 +15,6 @@ type DB struct {
 }
 
 func NewDB(dbPath string) (*DB, error) {
-	// Create directory if it doesn't exist
 	dir := filepath.Dir(dbPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create db directory: %w", err)
@@ -73,6 +72,20 @@ func (db *DB) createTables() error {
 		FOREIGN KEY(document_id) REFERENCES documents(id)
 	);
 
+	CREATE VIRTUAL TABLE IF NOT EXISTS chunk_fts USING fts5(
+		chunk_text,
+		section_title,
+		peripheral,
+		register_name,
+		content='chunks',
+		content_rowid='id'
+	);
+
+	CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN
+		INSERT INTO chunk_fts(rowid, chunk_text, section_title, peripheral, register_name)
+		VALUES (new.id, new.chunk_text, new.section_title, new.peripheral, new.register_name);
+	END;
+
 	CREATE INDEX IF NOT EXISTS idx_documents_chip_family ON documents(chip_family);
 	CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(processing_status);
 	CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
@@ -103,91 +116,6 @@ func (db *DB) InsertDocument(doc Document) (int64, error) {
 
 	fmt.Printf("📄 Inserted document: %s (id=%d)\n", doc.Filename, id)
 	return id, nil
-}
-
-func (db *DB) InsertChunk(chunk Chunk) (int64, error) {
-	result, err := db.conn.Exec(`
-		INSERT INTO chunks
-			(document_id, chunk_text, section_title, subsection_title, peripheral, register_name, page_number, token_count, chunk_index, metadata)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		chunk.DocumentID, chunk.ChunkText, chunk.SectionTitle, chunk.SubsectionTitle,
-		chunk.Peripheral, chunk.RegisterName, chunk.PageNumber, chunk.TokenCount,
-		chunk.ChunkIndex, chunk.Metadata,
-	)
-	if err != nil {
-		return 0, fmt.Errorf("failed to insert chunk: %w", err)
-	}
-
-	return result.LastInsertId()
-}
-
-func (db *DB) InsertChunks(chunks []Chunk) error {
-	tx, err := db.conn.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	stmt, err := tx.Prepare(`
-		INSERT INTO chunks
-			(document_id, chunk_text, section_title, subsection_title, peripheral, register_name, page_number, token_count, chunk_index, metadata)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-	if err != nil {
-		return fmt.Errorf("failed to prepare statement: %w", err)
-	}
-	defer stmt.Close()
-
-	for _, chunk := range chunks {
-		_, err := stmt.Exec(
-			chunk.DocumentID, chunk.ChunkText, chunk.SectionTitle, chunk.SubsectionTitle,
-			chunk.Peripheral, chunk.RegisterName, chunk.PageNumber, chunk.TokenCount,
-			chunk.ChunkIndex, chunk.Metadata,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to insert chunk %d: %w", chunk.ChunkIndex, err)
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	fmt.Printf("✅ Inserted %d chunks into database\n", len(chunks))
-	return nil
-}
-
-func (db *DB) UpdateDocumentStatus(id int64, status, errMsg string) error {
-	_, err := db.conn.Exec(`
-		UPDATE documents SET processing_status = ?, error_message = ? WHERE id = ?`,
-		status, errMsg, id,
-	)
-	return err
-}
-
-func (db *DB) GetChunksByPeripheral(peripheral string) ([]Chunk, error) {
-	rows, err := db.conn.Query(`
-		SELECT id, document_id, chunk_text, section_title, peripheral, register_name, page_number, token_count, chunk_index
-		FROM chunks WHERE peripheral = ?`, peripheral)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var chunks []Chunk
-	for rows.Next() {
-		var c Chunk
-		err := rows.Scan(&c.ID, &c.DocumentID, &c.ChunkText, &c.SectionTitle,
-			&c.Peripheral, &c.RegisterName, &c.PageNumber, &c.TokenCount, &c.ChunkIndex)
-		if err != nil {
-			return nil, err
-		}
-		chunks = append(chunks, c)
-	}
-	return chunks, nil
-}
-
-func (db *DB) Close() error {
-	return db.conn.Close()
 }
 
 func (db *DB) InsertChunksAndReturnIDs(chunks []Chunk) ([]int, error) {
@@ -226,4 +154,40 @@ func (db *DB) InsertChunksAndReturnIDs(chunks []Chunk) ([]int, error) {
 
 	fmt.Printf("✅ Inserted %d chunks into database\n", len(chunks))
 	return ids, nil
+}
+
+func (db *DB) UpdateDocumentStatus(id int64, status, errMsg string) error {
+	_, err := db.conn.Exec(`
+		UPDATE documents SET processing_status = ?, error_message = ? WHERE id = ?`,
+		status, errMsg, id,
+	)
+	return err
+}
+
+func (db *DB) GetChunksByPeripheral(peripheral string) ([]Chunk, error) {
+	rows, err := db.conn.Query(`
+		SELECT id, document_id, chunk_text, section_title, peripheral, register_name, page_number, token_count, chunk_index
+		FROM chunks WHERE peripheral = ?`, peripheral)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var chunks []Chunk
+	for rows.Next() {
+		var c Chunk
+		err := rows.Scan(
+			&c.ID, &c.DocumentID, &c.ChunkText, &c.SectionTitle,
+			&c.Peripheral, &c.RegisterName, &c.PageNumber, &c.TokenCount, &c.ChunkIndex,
+		)
+		if err != nil {
+			return nil, err
+		}
+		chunks = append(chunks, c)
+	}
+	return chunks, nil
+}
+
+func (db *DB) Close() error {
+	return db.conn.Close()
 }

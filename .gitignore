@@ -37,3 +37,4 @@ Thumbs.db
 *.log
 
 .env
+testdata/stm_docs/*.pdf
