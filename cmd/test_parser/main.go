@@ -3,10 +3,12 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/Tanish-Aravind/hardcoreai-rag/indexing"
 	"github.com/Tanish-Aravind/hardcoreai-rag/ingestion"
 	"github.com/Tanish-Aravind/hardcoreai-rag/storage"
+	"github.com/joho/godotenv"
 )
 
 type DocConfig struct {
@@ -30,6 +32,14 @@ var docsToIngest = []DocConfig{
 }
 
 func main() {
+
+	// Load .env file
+	// Load .env if it exists, don't fatal if it doesn't
+	godotenv.Load()
+	apiKey := os.Getenv("GEMINI_API_KEY")
+	if apiKey == "" {
+		log.Fatal("GEMINI_API_KEY not set in .env")
+	}
 	const dbPath = "testdata/test.db"
 
 	// Step 1: Setup storage DB
@@ -40,7 +50,7 @@ func main() {
 	defer db.Close()
 
 	// Step 2: Setup indexer with mock embedder
-	embedder := indexing.NewMockEmbedder()
+	embedder := indexing.NewGeminiEmbedder(apiKey)
 	indexer, err := indexing.NewIndexer(dbPath, embedder)
 	if err != nil {
 		log.Fatalf("Indexer failed: %v", err)

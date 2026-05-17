@@ -8,6 +8,7 @@ require (
 )
 
 require (
+	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/ncruces/julianday v1.0.0 // indirect
 	github.com/tetratelabs/wazero v1.7.3 // indirect
 	golang.org/x/sys v0.23.0 // indirect
