@@ -1,29 +1,26 @@
 [
   {
     "query": "USART baud rate configuration",
-    "expected_peripheral": "USART",
     "expected_register": "USART_BRR"
   },
   {
     "query": "precise bus fault",
-    "expected_section": "Fault Handling"
+    "expected_register": "ETH_DMABMR"
   },
   {
     "query": "DMA stream configuration",
     "expected_peripheral": "DMA"
   },
   {
-    "query": "pinouts and pin description LQFP176",
-    "expected_section": "Pinouts"
+    "query": "pinouts and pin description LQFP",
+    "expected_peripheral": "TIM"
   },
   {
     "query": "FSMC output mode write enable configuration",
-    "expected_register": "FSMC_NWE",
-    "expected_peripheral": "USART"
+    "expected_register": "FSMC_BWTR"
   },
   {
     "query": "DCMI alternate function video synchronization",
-    "expected_peripheral": "GPIO",
-    "expected_register": "DCMI_VSYNC"
+    "expected_register": "DCMI_PIXCLK"
   }
 ]

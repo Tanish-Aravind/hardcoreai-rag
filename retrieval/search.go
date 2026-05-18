@@ -5,9 +5,13 @@ import (
 	"context"
 	"fmt"
 
-	"hardcoreai-rag/embeddings"
 	"hardcoreai-rag/storage"
 )
+
+// Embedder is the interface that query embedders must satisfy.
+type Embedder interface {
+	EmbedQuery(ctx context.Context, query string) ([]float64, error)
+}
 
 // RetrievalEngine is the public interface for the unified retrieval pipeline.
 type RetrievalEngine interface {
@@ -17,11 +21,11 @@ type RetrievalEngine interface {
 // Engine implements the RetrievalEngine interface.
 type Engine struct {
 	db       *storage.DB
-	embedder embeddings.Embedder
+	embedder Embedder
 }
 
 // NewEngine constructs a new RAG Engine wrapper around the DB and the query embedder.
-func NewEngine(db *storage.DB, embedder embeddings.Embedder) *Engine {
+func NewEngine(db *storage.DB, embedder Embedder) *Engine {
 	return &Engine{
 		db:       db,
 		embedder: embedder,

@@ -8,9 +8,36 @@ import (
 	"unicode"
 )
 
+var stopWords = map[string]bool{
+	"a": true, "about": true, "above": true, "after": true, "again": true,
+	"against": true, "all": true, "am": true, "an": true, "and": true,
+	"any": true, "are": true, "as": true, "at": true, "be": true,
+	"because": true, "been": true, "before": true, "being": true, "below": true,
+	"between": true, "both": true, "but": true, "by": true, "can": true,
+	"did": true, "do": true, "does": true, "doing": true, "down": true,
+	"during": true, "each": true, "few": true, "for": true, "from": true,
+	"further": true, "had": true, "has": true, "have": true, "having": true,
+	"he": true, "her": true, "here": true, "hers": true, "him": true,
+	"his": true, "how": true, "i": true, "if": true, "in": true,
+	"into": true, "is": true, "it": true, "its": true, "me": true,
+	"more": true, "most": true, "my": true, "no": true, "nor": true,
+	"not": true, "of": true, "off": true, "on": true, "once": true,
+	"only": true, "or": true, "other": true, "our": true, "ours": true,
+	"out": true, "over": true, "own": true, "same": true, "she": true,
+	"should": true, "so": true, "some": true, "such": true, "than": true,
+	"that": true, "the": true, "their": true, "theirs": true, "them": true,
+	"then": true, "there": true, "these": true, "they": true, "this": true,
+	"those": true, "through": true, "to": true, "too": true, "under": true,
+	"until": true, "up": true, "very": true, "was": true, "we": true,
+	"were": true, "what": true, "when": true, "where": true, "which": true,
+	"while": true, "who": true, "whom": true, "why": true, "with": true,
+	"you": true, "your": true, "yours": true, "causes": true, "cause": true,
+}
+
 // sanitizeFTSQuery strips characters that FTS5 treats as syntax operators
 // while preserving tokens common in STM32 docs: letters, digits, underscores
-// (USART_BRR), hyphens (chip names), and spaces.
+// (USART_BRR), hyphens (chip names), and spaces. It splits terms, removes
+// English stop words, and joins them using 'OR' for high-recall BM25 matching.
 func sanitizeFTSQuery(query string) string {
 	var b strings.Builder
 	for _, r := range query {
@@ -20,7 +47,24 @@ func sanitizeFTSQuery(query string) string {
 			b.WriteRune(' ')
 		}
 	}
-	return strings.Join(strings.Fields(b.String()), " ")
+	
+	words := strings.Fields(b.String())
+	var keywords []string
+	for _, w := range words {
+		lowerW := strings.ToLower(w)
+		if !stopWords[lowerW] && len(lowerW) > 1 {
+			keywords = append(keywords, w)
+		}
+	}
+
+	if len(keywords) == 0 {
+		if len(words) == 0 {
+			return ""
+		}
+		return strings.Join(words, " OR ")
+	}
+
+	return strings.Join(keywords, " OR ")
 }
 
 // FTSSearch performs BM25-ranked full-text search against chunk_fts.

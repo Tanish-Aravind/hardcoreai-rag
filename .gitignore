@@ -6,8 +6,8 @@
 *.dylib
 /bin/
 /dist/
-rag-cli
-hardcoreai-rag
+/rag-cli
+/hardcoreai-rag
 
 # Go test artifacts
 *.test

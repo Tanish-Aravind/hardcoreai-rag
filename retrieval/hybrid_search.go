@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sort"
 
-	"hardcoreai-rag/embeddings"
 	"hardcoreai-rag/storage"
 )
 
@@ -21,10 +20,12 @@ const rrfK = 60
 //
 // Each result's FinalScore holds its RRF score at this stage. Rerank (Phase 6)
 // will overwrite FinalScore with the weighted additive score.
+//
+// Deprecated logic has been fully removed for portability.
 func HybridSearch(
 	ctx context.Context,
 	db *storage.DB,
-	embedder embeddings.Embedder,
+	embedder Embedder,
 	query string,
 	opts RetrievalOptions,
 ) (*RetrievalResult, error) {

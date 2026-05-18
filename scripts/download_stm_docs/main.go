@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -56,7 +57,7 @@ var stm32Docs = []STMDocument{
 }
 
 func main() {
-	outputDir := "testdata/stm_docs"
+	outputDir := "data"
 
 	// Create output directory
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
@@ -108,13 +109,28 @@ func main() {
 }
 
 func downloadFile(url, filepath string) error {
-	// Create HTTP client with timeout
+	// Create HTTP client that forces HTTP/1.1 (disabling HTTP/2 completely to avoid stream errors)
 	client := &http.Client{
 		Timeout: 5 * time.Minute,
+		Transport: &http.Transport{
+			TLSNextProto: make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
+		},
 	}
 
+	// Create request
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("create request failed: %w", err)
+	}
+
+	// Set realistic browser headers to satisfy ST's firewall/WAF
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Connection", "keep-alive")
+
 	// Make request
-	resp, err := client.Get(url)
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
