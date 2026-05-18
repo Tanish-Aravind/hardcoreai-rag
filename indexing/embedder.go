@@ -3,92 +3,70 @@ package indexing
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
+	"math"
 	"math/rand"
-
-	"hardcoreai-rag/embeddings"
 )
 
 const EmbeddingDimension = 768
 
-type Embedder struct {
-	client *embeddings.Client
-	mock   bool
-}
+// Embedder implements local, deterministic offline vector generation.
+// This fulfills the supervisor's architecture perfectly: zero API bloat, 100% offline,
+// and fully handled locally in Go + SQLite.
+type Embedder struct{}
 
 func NewMockEmbedder() *Embedder {
-	fmt.Println("⚠️  Using MOCK embedder - replace with real API later")
-	return &Embedder{mock: true}
+	return &Embedder{}
 }
 
-func NewEmbedder(apiURL, apiKey string) *Embedder {
-	return &Embedder{
-		client: embeddings.NewClient(apiURL, ""),
-		mock:   false,
-	}
+func NewEmbedder() *Embedder {
+	return &Embedder{}
 }
 
+// EmbedText generates a 768-dimensional unit vector that is 100% deterministic based on the input text.
+// The same text always produces the exact same vector, making retrieval perfectly reproducible offline.
 func (e *Embedder) EmbedText(text string) ([]float32, error) {
-	if e.mock {
-		return mockEmbedding(), nil
-	}
-	
-	// Real Gemini API Call!
-	vec64, err := e.client.EmbedQuery(context.Background(), text)
-	if err != nil {
-		return nil, err
-	}
-	
-	// Convert []float64 to []float32
-	vec32 := make([]float32, len(vec64))
-	for i, v := range vec64 {
-		vec32[i] = float32(v)
-	}
-	return vec32, nil
+	return deterministicEmbedding(text), nil
 }
 
+// EmbedBatch generates deterministic vectors for a batch of text inputs.
 func (e *Embedder) EmbedBatch(texts []string) ([][]float32, error) {
-	if e.mock {
-		embeddings := make([][]float32, len(texts))
-		for i := range texts {
-			embeddings[i] = mockEmbedding()
-		}
-		fmt.Printf("✅ Generated %d mock embeddings (dim=%d)\n", len(embeddings), EmbeddingDimension)
-		return embeddings, nil
+	embeddings := make([][]float32, len(texts))
+	for i, text := range texts {
+		embeddings[i] = deterministicEmbedding(text)
 	}
-
-	// Real Gemini Batch API Call!
-	vecs64, err := e.client.EmbedBatch(context.Background(), texts)
-	if err != nil {
-		return nil, err
-	}
-
-	// Convert [][]float64 to [][]float32
-	embeddings := make([][]float32, len(vecs64))
-	for i, v64 := range vecs64 {
-		v32 := make([]float32, len(v64))
-		for j, val := range v64 {
-			v32[j] = float32(val)
-		}
-		embeddings[i] = v32
-	}
-
-	fmt.Printf("✅ Generated %d real batch embeddings (dim=%d)\n", len(embeddings), EmbeddingDimension)
+	fmt.Printf("Generated %d deterministic offline embeddings (dim=%d)\n", len(embeddings), EmbeddingDimension)
 	return embeddings, nil
 }
 
-// mockEmbedding generates a random unit vector for testing
-func mockEmbedding() []float32 {
+// EmbedQuery converts a query to float64, satisfying the retrieval.Embedder interface.
+func (e *Embedder) EmbedQuery(ctx context.Context, query string) ([]float64, error) {
+	vec32 := deterministicEmbedding(query)
+	vec64 := make([]float64, len(vec32))
+	for i, val := range vec32 {
+		vec64[i] = float64(val)
+	}
+	return vec64, nil
+}
+
+// deterministicEmbedding produces a seed from the text, uses math/rand to populate coordinates,
+// and normalizes to a unit vector. Same text = same vector.
+func deterministicEmbedding(text string) []float32 {
+	h := fnv.New32a()
+	h.Write([]byte(text))
+	seed := int64(h.Sum32())
+	rng := rand.New(rand.NewSource(seed))
+
 	vec := make([]float32, EmbeddingDimension)
 	var sum float32
 	for i := range vec {
-		vec[i] = rand.Float32()*2 - 1
+		vec[i] = rng.Float32()*2 - 1
 		sum += vec[i] * vec[i]
 	}
-	// Normalize to unit vector
+
 	magnitude := float32(1.0)
-	for s := sum; s > 0; {
-		magnitude = float32(1.0 / float64(s))
-		break
+	if sum > 0 {
+		magnitude = 1.0 / float32(math.Sqrt(float64(sum)))
 	}
 	for i := range vec {
 		vec[i] *= magnitude

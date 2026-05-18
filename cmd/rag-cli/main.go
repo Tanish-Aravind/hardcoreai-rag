@@ -85,7 +85,7 @@ func runQueryCommand() {
 	defer db.Close()
 
 	// Setup deterministic offline local embedder
-	embedder := indexing.NewEmbedder()
+	embedder := indexing.NewEmbedder("", apiKey)
 	engine := retrieval.NewEngine(db, embedder)
 
 	opts := retrieval.RetrievalOptions{
